@@ -1,0 +1,47 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: mini-ai-gateway
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        # 如果 Nacos 关闭鉴权，下面两行可省略
+        username: nacos
+        password: nacos
+        group: DEFAULT_GROUP
+        ephemeral: true
+        register-enabled: true
+
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+
+      routes:
+        - id: httpbin-route
+          uri: https://httpbin.org
+          predicates:
+            - Path=/httpbin/**
+          filters:
+            - StripPrefix=1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    gateway:
+      enabled: true
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.alibaba.cloud.nacos: info
+    org.springframework.cloud.gateway: info

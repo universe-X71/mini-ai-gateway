@@ -15,7 +15,7 @@ public class ChatCompletionRequest {
     private Double temperature = 0.7;
 
     @JsonProperty("max_tokens")
-    private Integer maxTokens = 1000;
+    private Integer maxTokens;
 
     private Boolean stream = false;
 

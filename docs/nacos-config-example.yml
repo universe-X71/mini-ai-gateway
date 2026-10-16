@@ -1,0 +1,91 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+gateway:
+  routing:
+    strategy: cost-first         # cost-first / speed-first / round-robin
+  rate-limit:
+    rpm: 100                    # 每分钟请求数
+    tpm: 100000                # 每分钟 token 数
+    window-seconds: 60         # 滑动窗口大小
+  quota:
+    daily-tokens: 100000      # 每日 token 配额
+    default-max-tokens: 4096    # 客户端不传时的默认值
+    max-tokens-limit: 8192      # 客户端传了也不准超过这个值
+  providers:
+    openai:
+      base-url: https://api.chatanywhere.tech
+      api-key: ${OPENAI_API_KEY:xxxxxxxxxxxxxxxxx}
+      timeout-seconds: 60
+      supported-models: [gpt-4o-mini, gpt-4o, o1-mini]
+      model-mapping:
+        deepseek-chat: gpt-4o-mini
+    deepseek: # 新增一个 provider
+      base-url: https://api.deepseek.com
+      api-key: ${DEEPSEEK_API_KEY:xxxxxxxxxxxxxxxxx}
+      timeout-seconds: 60
+      supported-models: [deepseek-chat, deepseek-reasoner, gpt-4o-mini]
+      model-mapping:
+        gpt-4o-mini: deepseek-chat    # 收到 gpt-4o-mini 时，实际用 deepseek-chat 请求
+    ollama:
+      base-url: http://localhost:11434
+      api-key: ollama
+      timeout-seconds: 120
+      supported-models: [qwen3.5:4b, llama3]
+
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+  r2dbc:
+    url: r2dbc:mysql://127.0.0.1:3306/mini_gateway?useUnicode=true&characterEncoding=utf8&serverZoneId=Asia/Shanghai
+    username: root
+    password: root
+    pool:
+      initial-size: 5
+      max-size: 20
+      max-idle-time: 30m
+  application:
+    name: mini-ai-gateway
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+
+      routes:
+        - id: httpbin-route
+          uri: https://httpbin.org
+          predicates:
+            - Path=/httpbin/**
+          filters:
+            - StripPrefix=1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    gateway:
+      enabled: true
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.alibaba.cloud.nacos: info
+    org.springframework.cloud.gateway: info

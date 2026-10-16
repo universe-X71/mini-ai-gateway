@@ -1,5 +1,6 @@
 package com.example.miniaigateway.exception;
 
+import com.example.miniaigateway.security.SecurityViolationException;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -8,7 +9,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
 
-/** 比 Spring 默认的异常处理器优先级更高 */
+/**
+ * 比 Spring 默认的异常处理器优先级更高
+ */
 @Order(GlobalExceptionHandler.HIGHEST_PRECEDENCE_ORDER)
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -37,6 +40,12 @@ public class GlobalExceptionHandler {
                 .body(errorBody(TYPE_INVALID_REQUEST, e.getMessage()));
     }
 
+    @ExceptionHandler(SecurityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleSecurityViolation(SecurityViolationException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(errorBody(e.getType(), e.getMessage()));
+    }
+
     // 其他未捕获异常 → 500
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception e) {
@@ -44,7 +53,9 @@ public class GlobalExceptionHandler {
                 .body(errorBody(TYPE_INTERNAL, e.getMessage()));
     }
 
-    /** 统一 OpenAI 风格的错误响应体：{"error": {"message": ..., "type": ...}} */
+    /**
+     * 统一 OpenAI 风格的错误响应体：{"error": {"message": ..., "type": ...}}
+     */
     private Map<String, Object> errorBody(String type, String message) {
         return Map.of(FIELD_ERROR, Map.of(
                 FIELD_MESSAGE, message,

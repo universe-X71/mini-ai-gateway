@@ -2,6 +2,7 @@ package com.example.miniaigateway.controller;
 
 import com.example.miniaigateway.adapter.ModelAdapter;
 import com.example.miniaigateway.annotation.RateLimit;
+import com.example.miniaigateway.annotation.SecurityCheck;
 import com.example.miniaigateway.dto.ChatCompletionRequest;
 import com.example.miniaigateway.routing.RouterService;
 import com.example.miniaigateway.token.TokenCounter;
@@ -40,6 +41,7 @@ public class ChatCompletionController {
      */
     @PostMapping(value = "/chat/completions")
     @RateLimit
+    @SecurityCheck
     public Mono<ResponseEntity<Object>> chatCompletions(
             @RequestHeader(HEADER_USER_ID) String userId,
             @RequestBody ChatCompletionRequest request) {

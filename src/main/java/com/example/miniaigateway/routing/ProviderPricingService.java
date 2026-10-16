@@ -12,6 +12,7 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,6 +21,19 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ProviderPricingService {
 
     private static final String OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
+
+    /** 每天凌晨 3 点同步 */
+    private static final String DAILY_SYNC_CRON = "0 0 3 * * ?";
+
+    private static final Duration SYNC_TIMEOUT = Duration.ofSeconds(15);
+
+    /** 定价来源：OpenRouter 自动同步 / 人工维护 */
+    private static final String SOURCE_OPENROUTER = "openrouter";
+    private static final String SOURCE_MANUAL = "manual";
+
+    /** 模型名可能带有的 provider 前缀，用于「短名 → 全名」匹配 */
+    private static final List<String> MODEL_ID_PREFIXES =
+            List.of("openai/", "anthropic/", "google/", "deepseek/", "meta/");
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
@@ -55,7 +69,7 @@ public class ProviderPricingService {
     /**
      * 每天凌晨 3 点同步
      */
-    @Scheduled(cron = "0 0 3 * * ?")
+    @Scheduled(cron = DAILY_SYNC_CRON)
     public void scheduledSync() {
         syncFromOpenRouter().subscribe();
     }
@@ -83,7 +97,7 @@ public class ProviderPricingService {
         return webClient.get()
                 .retrieve()
                 .bodyToMono(String.class)
-                .timeout(Duration.ofSeconds(15))
+                .timeout(SYNC_TIMEOUT)
                 .flatMapMany(body -> {
                     try {
                         JsonNode root = objectMapper.readTree(body);
@@ -121,7 +135,7 @@ public class ProviderPricingService {
             return pricingRepository.findByModelId(id)
                     .flatMap(existing -> {
                         // 存在则更新价格，但保留 source=manual 的人工修改（不覆盖）
-                        if ("manual".equals(existing.getSource())) {
+                        if (SOURCE_MANUAL.equals(existing.getSource())) {
                             return Mono.empty();
                         }
                         existing.setPromptPrice(promptPrice);
@@ -136,7 +150,7 @@ public class ProviderPricingService {
                         entity.setDisplayName(name);
                         entity.setPromptPrice(promptPrice);
                         entity.setCompletionPrice(completionPrice);
-                        entity.setSource("openrouter");
+                        entity.setSource(SOURCE_OPENROUTER);
                         entity.setEnabled(true);
                         return pricingRepository.save(entity);
                     }))
@@ -158,7 +172,7 @@ public class ProviderPricingService {
         ModelPricing mp = pricingCache.get(model);
         if (mp != null) return mp;
 
-        for (String prefix : new String[]{"openai/", "anthropic/", "google/", "deepseek/", "meta/"}) {
+        for (String prefix : MODEL_ID_PREFIXES) {
             mp = pricingCache.get(prefix + model);
             if (mp != null) return mp;
         }

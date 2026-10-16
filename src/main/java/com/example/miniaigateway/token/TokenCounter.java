@@ -10,6 +10,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class TokenCounter {
 
+    /** 每条消息的固定开销（role 与分隔符），OpenAI 官方建议值 */
+    private static final int TOKENS_PER_MESSAGE = 4;
+
+    /** 回复时的固定开销 */
+    private static final int REPLY_PRIMING_TOKENS = 2;
+
     // cl100k_base 是 GPT-4、GPT-3.5-turbo 使用的编码
     private final EncodingRegistry registry = Encodings.newDefaultEncodingRegistry();
     private final Encoding encoding = registry.getEncoding(EncodingType.CL100K_BASE);
@@ -34,11 +40,11 @@ public class TokenCounter {
         }
         int total = 0;
         for (ChatCompletionRequest.Message msg : request.getMessages()) {
-            total += 4;  // 每条消息的固定开销
+            total += TOKENS_PER_MESSAGE;
             total += countTokens(msg.getRole());
             total += countTokens(msg.getContent());
         }
-        total += 2;  // 回复时的固定开销
+        total += REPLY_PRIMING_TOKENS;
         return total;
     }
 }

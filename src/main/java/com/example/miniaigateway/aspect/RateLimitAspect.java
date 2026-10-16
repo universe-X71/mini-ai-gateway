@@ -4,26 +4,26 @@ import com.example.miniaigateway.annotation.RateLimit;
 import com.example.miniaigateway.dto.ChatCompletionRequest;
 import com.example.miniaigateway.dto.ChatCompletionResponse;
 import com.example.miniaigateway.exception.RateLimitException;
-import com.example.miniaigateway.ratelimit.TokenRateLimiter;
 import com.example.miniaigateway.quota.QuotaService;
+import com.example.miniaigateway.ratelimit.TokenRateLimiter;
 import com.example.miniaigateway.token.TokenCounter;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.lang.reflect.Method;
-
 @Slf4j
 @Aspect
 @Component
 public class RateLimitAspect {
+
+    /** 无法从入参中解析出用户时的兜底主体 */
+    private static final String ANONYMOUS_USER_ID = "anonymous";
 
     private final TokenRateLimiter rateLimiter;
     private final QuotaService quotaService;
@@ -47,16 +47,12 @@ public class RateLimitAspect {
     @Around("@annotation(rateLimit)")
     public Object around(ProceedingJoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
         // 1. 提取参数
-        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-        Method method = signature.getMethod();
         Object[] args = joinPoint.getArgs();
 
         ChatCompletionRequest request = null;
-        String userId = "anonymous";
+        String userId = ANONYMOUS_USER_ID;
 
         for (Object arg : args) {
-            log.info("Aspect arg: type={}, value={}",
-                    arg == null ? "null" : arg.getClass().getSimpleName(), arg);
             if (arg instanceof ChatCompletionRequest) {
                 request = (ChatCompletionRequest) arg;
             } else if (arg instanceof String s) {
@@ -110,6 +106,11 @@ public class RateLimitAspect {
         );
     }
 
+    /**
+     * {@code instanceof} 只能校验到 Mono / ResponseEntity 这一层，元素泛型无法在运行时确认，
+     * 故此处需要显式抑制 unchecked 告警——签名已约定目标方法的返回类型。
+     */
+    @SuppressWarnings("unchecked")
     private Mono<ResponseEntity<Object>> proceedToBusiness(
             ProceedingJoinPoint joinPoint, String userId, int estimatedTokens) {
         try {

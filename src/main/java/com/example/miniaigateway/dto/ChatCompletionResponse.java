@@ -8,9 +8,12 @@ import java.util.List;
 @Data
 public class ChatCompletionResponse {
 
+    /** OpenAI 兼容协议中非流式响应的 object 类型 */
+    private static final String OBJECT_TYPE_CHAT_COMPLETION = "chat.completion";
+
     private String id;
 
-    private String object = "chat.completion";
+    private String object = OBJECT_TYPE_CHAT_COMPLETION;
 
     private Long created;
 

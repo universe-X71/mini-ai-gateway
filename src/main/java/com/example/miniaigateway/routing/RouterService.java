@@ -13,22 +13,26 @@ import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import org.springframework.http.codec.ServerSentEvent;
-import reactor.core.publisher.Flux;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Slf4j
 @Service
 public class RouterService {
+
+    /** 请求未指定 max_tokens 时，估算成本所用的默认补全长度 */
+    private static final int DEFAULT_ESTIMATED_COMPLETION_TOKENS = 1000;
 
     private final ModelAdapterFactory adapterFactory;
     private final ProviderProperties providerProperties;
@@ -183,7 +187,7 @@ public class RouterService {
      */
     private Mono<List<ModelAdapter>> applyStrategy(
             List<ModelAdapter> candidates, ChatCompletionRequest request, int promptTokens) {
-        RouteStrategyEnum strategy = parseStrategy(strategyName);
+        RouteStrategy strategy = parseStrategy(strategyName);
 
         return switch (strategy) {
             case COST_FIRST -> sortByCost(candidates, request, promptTokens);
@@ -206,7 +210,9 @@ public class RouterService {
      */
     private Mono<List<ModelAdapter>> sortByCost(
             List<ModelAdapter> candidates, ChatCompletionRequest request, int promptTokens) {
-        int estCompletion = request.getMaxTokens() == null ? 1000 : request.getMaxTokens();
+        int estCompletion = request.getMaxTokens() == null
+                ? DEFAULT_ESTIMATED_COMPLETION_TOKENS
+                : request.getMaxTokens();
 
         return Mono.fromCallable(() -> candidates.stream()
                 .sorted(Comparator.comparingDouble(a -> {
@@ -229,11 +235,13 @@ public class RouterService {
                             .collect(Collectors.toList());
 
                     return Mono.zip(p95Monos, results -> {
-                        return java.util.stream.IntStream.range(0, list.size())
+                        return IntStream.range(0, list.size())
                                 .boxed()
                                 .sorted(Comparator.comparingLong(i -> {
                                     Long p95 = (Long) results[i];
-                                    return p95 == -1 ? Long.MAX_VALUE : p95;
+                                    return p95 == LatencyTracker.INSUFFICIENT_DATA
+                                            ? Long.MAX_VALUE
+                                            : p95;
                                 }))
                                 .map(list::get)
                                 .collect(Collectors.toList());
@@ -253,11 +261,11 @@ public class RouterService {
         return requestModel;
     }
 
-    private RouteStrategyEnum parseStrategy(String name) {
+    private RouteStrategy parseStrategy(String name) {
         try {
-            return RouteStrategyEnum.valueOf(name.toUpperCase().replace("-", "_"));
+            return RouteStrategy.valueOf(name.toUpperCase().replace("-", "_"));
         } catch (Exception e) {
-            return RouteStrategyEnum.ROUND_ROBIN;
+            return RouteStrategy.ROUND_ROBIN;
         }
     }
 

@@ -1,4 +1,4 @@
-package com.example.miniaigateway.entity;
+package com.example.miniaigateway.quota;
 
 import lombok.Data;
 import org.springframework.data.annotation.Id;

@@ -22,13 +22,13 @@ public class TokenRateLimiter {
     private final RedisScript<Long> rpmScript;
     private final RedisScript<Long> tpmScript;
 
-    @Value("${gateway.rate-limit.rpm:20}")
+    @Value("${gateway.rate-limit.rpm}")
     private int rpmLimit;
 
-    @Value("${gateway.rate-limit.tpm:100000}")
+    @Value("${gateway.rate-limit.tpm}")
     private int tpmLimit;
 
-    @Value("${gateway.rate-limit.window-seconds:60}")
+    @Value("${gateway.rate-limit.window-seconds}")
     private int windowSeconds;
 
     public TokenRateLimiter(ReactiveRedisTemplate<String, String> redisTemplate) {

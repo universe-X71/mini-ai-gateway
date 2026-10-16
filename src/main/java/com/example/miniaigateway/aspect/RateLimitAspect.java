@@ -5,7 +5,7 @@ import com.example.miniaigateway.dto.ChatCompletionRequest;
 import com.example.miniaigateway.dto.ChatCompletionResponse;
 import com.example.miniaigateway.exception.RateLimitException;
 import com.example.miniaigateway.ratelimit.TokenRateLimiter;
-import com.example.miniaigateway.service.QuotaService;
+import com.example.miniaigateway.quota.QuotaService;
 import com.example.miniaigateway.token.TokenCounter;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;

@@ -56,8 +56,8 @@ public class TokenRateLimiter {
     /**
      * RPM 限流：每分钟请求数
      */
-    public Mono<Boolean> acquireRpm(String userId) {
-        String key = KEY_PREFIX_RPM + userId;
+    public Mono<Boolean> acquireRpm(String tenantId) {
+        String key = KEY_PREFIX_RPM + tenantId;
         long now = System.currentTimeMillis();
         long window = windowSeconds * 1000L;
 
@@ -67,15 +67,15 @@ public class TokenRateLimiter {
                 .next()
                 .map(result -> result == SCRIPT_ALLOWED)
                 .doOnNext(allowed -> {
-                    if (!allowed) log.warn("RPM limit exceeded for user {}", userId);
+                    if (!allowed) log.warn("RPM limit exceeded for tenant {}", tenantId);
                 });
     }
 
     /**
      * TPM 限流：每分钟 token 数
      */
-    public Mono<Boolean> acquireTpm(String userId, int estimatedTokens) {
-        String key = KEY_PREFIX_TPM + userId;
+    public Mono<Boolean> acquireTpm(String tenantId, int estimatedTokens) {
+        String key = KEY_PREFIX_TPM + tenantId;
         long now = System.currentTimeMillis();
         long window = windowSeconds * 1000L;
 
@@ -86,15 +86,15 @@ public class TokenRateLimiter {
                 .next()
                 .map(result -> result == SCRIPT_ALLOWED)
                 .doOnNext(allowed -> {
-                    if (!allowed) log.warn("TPM limit exceeded for user {}: {} tokens", userId, estimatedTokens);
+                    if (!allowed) log.warn("TPM limit exceeded for tenant {}: {} tokens", tenantId, estimatedTokens);
                 });
     }
 
-    public Mono<Void> adjustTpm(String userId, int diff) {
+    public Mono<Void> adjustTpm(String tenantId, int diff) {
         if (diff == 0) {
             return Mono.empty();
         }
-        String key = KEY_PREFIX_TPM + userId;
+        String key = KEY_PREFIX_TPM + tenantId;
         long now = System.currentTimeMillis();
         long window = windowSeconds * 1000L;
 

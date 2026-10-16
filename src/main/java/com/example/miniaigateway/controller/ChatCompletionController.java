@@ -1,6 +1,7 @@
 package com.example.miniaigateway.controller;
 
 import com.example.miniaigateway.adapter.ModelAdapter;
+import com.example.miniaigateway.annotation.Authenticated;
 import com.example.miniaigateway.annotation.RateLimit;
 import com.example.miniaigateway.annotation.SecurityCheck;
 import com.example.miniaigateway.dto.ChatCompletionRequest;
@@ -11,9 +12,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -24,7 +25,6 @@ import java.util.stream.Collectors;
 @RequestMapping("/v1")
 public class ChatCompletionController {
 
-    private static final String HEADER_USER_ID = "X-User-Id";
     private static final String HEADER_PROVIDER_CHAIN = "X-Provider-Chain";
     private static final String HEADER_FALLBACK_PROVIDER = "X-Fallback-Provider";
 
@@ -36,14 +36,12 @@ public class ChatCompletionController {
         this.routerService = routerService;
     }
 
-    /**
-     * @param userId 方法体未直接使用，由 {@code RateLimitAspect} 从入参中提取作为限流主体，勿删
-     */
     @PostMapping(value = "/chat/completions")
     @RateLimit
     @SecurityCheck
+    @Authenticated
     public Mono<ResponseEntity<Object>> chatCompletions(
-            @RequestHeader(HEADER_USER_ID) String userId,
+            ServerWebExchange exchange,
             @RequestBody ChatCompletionRequest request) {
 
         int promptTokens = tokenCounter.countPromptTokens(request);

@@ -7,11 +7,11 @@ import org.springframework.data.relational.core.mapping.Table;
 import java.time.LocalDate;
 
 @Data
-@Table("user_quota")
-public class UserQuotaEntity {
+@Table("tenant_quota")
+public class TenantQuotaEntity {
 
     @Id
-    private String userId;
+    private String tenantId;
     private Long dailyLimit;
     private Long usedToday;
     private LocalDate lastReset;

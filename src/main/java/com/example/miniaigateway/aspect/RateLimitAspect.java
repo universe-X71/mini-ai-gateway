@@ -1,6 +1,5 @@
 package com.example.miniaigateway.aspect;
 
-import com.example.miniaigateway.annotation.RateLimit;
 import com.example.miniaigateway.dto.ChatCompletionRequest;
 import com.example.miniaigateway.dto.ChatCompletionResponse;
 import com.example.miniaigateway.exception.RateLimitException;
@@ -12,18 +11,23 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Slf4j
 @Aspect
 @Component
+@Order(2)
 public class RateLimitAspect {
 
-    /** 无法从入参中解析出用户时的兜底主体 */
-    private static final String ANONYMOUS_USER_ID = "anonymous";
+    /**
+     * 无法从入参中解析出租户时的兜底主体
+     */
+    private static final String ANONYMOUS_TENANT_ID = "anonymous";
 
     private final TokenRateLimiter rateLimiter;
     private final QuotaService quotaService;
@@ -44,22 +48,30 @@ public class RateLimitAspect {
         this.tokenCounter = tokenCounter;
     }
 
-    @Around("@annotation(rateLimit)")
-    public Object around(ProceedingJoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
+    /**
+     * 切点写成全限定名（不绑定变量）是有意为之。绑定型的 {@code @annotation(rateLimit)} 要求 Spring
+     * 在<b>动态匹配</b>时把注解实例作为通知方法入参绑定进来，而本切面链的 {@code joinPoint.proceed()}
+     * 会被上游切面推迟到响应式操作符里执行（见 {@link AuthAspect}），那一刻
+     * {@code ExposeInvocationInterceptor} 的 ThreadLocal 已经还原，绑定值取不到，会抛
+     * "Required to bind 2 arguments, but only bound 1 (JoinPointMatch was NOT bound in invocation)"。
+     */
+    @Around("@annotation(com.example.miniaigateway.annotation.RateLimit)")
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
         // 1. 提取参数
         Object[] args = joinPoint.getArgs();
 
         ChatCompletionRequest request = null;
-        String userId = ANONYMOUS_USER_ID;
+        String tenantId = ANONYMOUS_TENANT_ID;
 
         for (Object arg : args) {
-            if (arg instanceof ChatCompletionRequest) {
-                request = (ChatCompletionRequest) arg;
-            } else if (arg instanceof String s) {
-                userId = s;
+            if (arg instanceof ChatCompletionRequest req) {
+                request = req;
+            } else if (arg instanceof ServerWebExchange e) {
+                Object tid = e.getAttributes().get("tenantId");
+                if (tid != null && !tid.toString().isBlank()) {
+                    tenantId = tid.toString();
+                }
             }
-            // 这里假设 userId 是从方法参数传入，或者通过其他方式获取
-            // 实际项目中通常通过 ServerWebExchange 或 ThreadLocal 获取
         }
 
         if (request == null) {
@@ -67,7 +79,7 @@ public class RateLimitAspect {
         }
 
         // 2. 构建限流检查链（重点：必须返回响应式类型）
-        final String finalUserId = userId;
+        final String finalTenantId = tenantId;
         final ChatCompletionRequest finalRequest = request;
 
         // 3. 计算 Token
@@ -84,21 +96,21 @@ public class RateLimitAspect {
 
         // 使用 Mono.defer 延迟执行，确保只有在订阅时才触发限流检查
         return Mono.defer(() ->
-                quotaService.ensureUserExists(finalUserId, dailyQuota)
-                        .then(rateLimiter.acquireRpm(finalUserId))
+                quotaService.ensureTenantExists(finalTenantId, dailyQuota)
+                        .then(rateLimiter.acquireRpm(finalTenantId))
                         .flatMap(rpmAllowed -> {
                             if (!rpmAllowed) return Mono.error(new RateLimitException("RPM limit exceeded"));
-                            return rateLimiter.acquireTpm(finalUserId, estimatedTokens);
+                            return rateLimiter.acquireTpm(finalTenantId, estimatedTokens);
                         })
                         .flatMap(tpmAllowed -> {
                             if (!tpmAllowed) return Mono.error(new RateLimitException("TPM limit exceeded"));
-                            return quotaService.tryConsume(finalUserId, estimatedTokens);
+                            return quotaService.tryConsume(finalTenantId, estimatedTokens);
                         })
                         .flatMap(quotaAllowed -> {
                             if (!quotaAllowed) return Mono.error(new RateLimitException("Daily quota exhausted"));
                             // 4. 限流通过，执行原方法
                             try {
-                                return proceedToBusiness(joinPoint, finalUserId, estimatedTokens);
+                                return proceedToBusiness(joinPoint, finalTenantId, estimatedTokens);
                             } catch (Throwable e) {
                                 return Mono.error(e);
                             }
@@ -112,12 +124,12 @@ public class RateLimitAspect {
      */
     @SuppressWarnings("unchecked")
     private Mono<ResponseEntity<Object>> proceedToBusiness(
-            ProceedingJoinPoint joinPoint, String userId, int estimatedTokens) {
+            ProceedingJoinPoint joinPoint, String tenantId, int estimatedTokens) {
         try {
             Object result = joinPoint.proceed();
             if (result instanceof Mono<?> monoResult) {
                 return ((Mono<ResponseEntity<Object>>) monoResult)
-                        .doOnNext(response -> calibrateTokenUsage(response, userId, estimatedTokens));
+                        .doOnNext(response -> calibrateTokenUsage(response, tenantId, estimatedTokens));
             }
             return Mono.just((ResponseEntity<Object>) result);
         } catch (Throwable e) {
@@ -125,7 +137,7 @@ public class RateLimitAspect {
         }
     }
 
-    private void calibrateTokenUsage(ResponseEntity<Object> response, String userId, int estimatedTokens) {
+    private void calibrateTokenUsage(ResponseEntity<Object> response, String tenantId, int estimatedTokens) {
         Object body = response.getBody();
 
         // 非流式：body 是 ChatCompletionResponse，直接读 usage
@@ -136,8 +148,8 @@ public class RateLimitAspect {
 
                 if (diff != 0) {
                     log.info("Token 校准: 预估={}, 实际={}, 差额={}", estimatedTokens, actualTokens, diff);
-                    quotaService.adjustQuota(userId, diff).subscribe();
-                    rateLimiter.adjustTpm(userId, diff).subscribe();
+                    quotaService.adjustQuota(tenantId, diff).subscribe();
+                    rateLimiter.adjustTpm(tenantId, diff).subscribe();
                 }
             }
         }

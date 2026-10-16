@@ -46,6 +46,12 @@ public class GlobalExceptionHandler {
                 .body(errorBody(e.getType(), e.getMessage()));
     }
 
+    @ExceptionHandler(AuthException.class)
+    public ResponseEntity<Map<String, Object>> handleAuth(AuthException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(errorBody(e.getCode(), e.getMessage()));
+    }
+
     // 其他未捕获异常 → 500
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception e) {

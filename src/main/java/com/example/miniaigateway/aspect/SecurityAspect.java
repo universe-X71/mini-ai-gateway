@@ -31,8 +31,12 @@ public class SecurityAspect {
         this.securityProperties = securityProperties;
     }
 
-    @Around("@annotation(securityCheck)")
-    public Object around(ProceedingJoinPoint joinPoint, com.example.miniaigateway.annotation.SecurityCheck securityCheck) {
+    /**
+     * 切点写成全限定名（不绑定变量）是有意为之，原因见 {@link RateLimitAspect#around}：
+     * 绑定型切点的注解入参在「上游切面把 proceed 推迟到响应式操作符里」时取不到值。
+     */
+    @Around("@annotation(com.example.miniaigateway.annotation.SecurityCheck)")
+    public Object around(ProceedingJoinPoint joinPoint) {
         Object[] args = joinPoint.getArgs();
 
         ChatCompletionRequest request = null;

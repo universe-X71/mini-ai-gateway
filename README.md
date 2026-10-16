@@ -115,16 +115,16 @@ mvn spring-boot:run
 ### 测试
 
 ```bash
-# 非流式
+# 非流式（身份由 API Key 决定，租户/限流/配额都挂在它对应的 tenant 上）
 curl -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "X-User-Id: testuser1" \
+  -H "Authorization: Bearer sk-xxx" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}'
 
 # 流式
 curl -N -X POST http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "X-User-Id: testuser1" \
+  -H "Authorization: Bearer sk-xxx" \
   -d '{"model":"gpt-4o-mini","stream":true,"messages":[{"role":"user","content":"hi"}]}'
 ```
 

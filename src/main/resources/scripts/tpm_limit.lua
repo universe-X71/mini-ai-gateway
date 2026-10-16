@@ -1,4 +1,4 @@
--- KEYS[1]: 限流 key，如 "rl:tpm:user123"
+-- KEYS[1]: 限流 key，如 "rl:tpm:tenant123"
 -- ARGV[1]: 当前时间戳（毫秒）
 -- ARGV[2]: 窗口大小（毫秒）
 -- ARGV[3]: 限制 token 总数
